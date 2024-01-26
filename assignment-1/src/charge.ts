@@ -18,33 +18,31 @@ export function charge(invoice: Invoice, payments: Payment[]) {
   const total = invoice.total;
   let deposit = 0;
 
-  payments
-    .sort((payment) => (payment.type !== 'CASH' ? -1 : 1))
-    .map((payment) => {
-      if (payment.type === 'COUPON') {
-        if (payment.percentage != null) {
-          deposit += Math.floor(total * (payment.percentage / 100));
-        } else {
-          deposit += payment.amount || 0;
-        }
-      } else {
-        if (deposit >= total) {
-          throw new Error('OverCharge');
-        }
-        deposit += payment.amount || 0;
-      }
-    });
+  const nonCashPayments = payments.filter((payment) => payment.type !== 'CASH');
+  const cashPayments = payments.filter((payment) => payment.type === 'CASH');
+
+  for (const nonCashPayment of nonCashPayments) {
+    if (nonCashPayment.type !== 'COUPON') {
+      throw new Error('UnknownPaymentType');
+    }
+    if (nonCashPayment.percentage != null) {
+      deposit += Math.floor(total * (nonCashPayment.percentage / 100));
+      continue;
+    }
+    deposit += nonCashPayment.amount || 0;
+  }
+  for (const cashPayment of cashPayments) {
+    if (deposit >= total) {
+      throw new Error('OverCharge');
+    }
+    deposit += cashPayment.amount || 0;
+  }
+
   if (total > deposit) {
     throw new Error('Shortage');
   }
+  const isCoupon = cashPayments.length === 0;
 
-  let isCoupon = true;
-  for (let i = 0; i < payments.length; i++) {
-    if (payments[i].type !== 'COUPON') {
-      isCoupon = false;
-      continue;
-    }
-  }
   if (isCoupon) return { total, deposit, change: 0 };
   return { total: total, deposit: deposit, change: deposit - total };
 }
